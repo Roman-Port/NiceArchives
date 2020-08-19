@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "RomanPort.HttpWebArchive": {
+      "commandName": "Project",
+      "commandLineArgs": "config.json"
+    }
+  }
+}
