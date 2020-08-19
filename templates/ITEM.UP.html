@@ -1,0 +1,14 @@
+<div class="aitem_content navbar">
+    <a href="{PATH}"><div class="navbar_btn navbar_btn_up"></div></a>
+    <form method="get" class="navbar_sort_form">
+        <select name="sort" id="sort" onchange="this.parentElement.submit()" class="navbar_sort navbar_btn">
+            <option value="FILE_DATE"{SELECT_SORT_1}>Sort by Date Updated</option>
+            <option value="NAME"{SELECT_SORT_2}>Sort by Name</option>
+            <option value="SIZE"{SELECT_SORT_3}>Sort by Size</option>
+            <option value="UPLOADED_DATE"{SELECT_SORT_4}>Sort by Date Uploaded</option>
+        </select>
+        <noscript>
+            <input type="submit" value="Update" class="navbar_btn navbar_fallback_submit" />
+        </noscript>
+    </form>
+</div>

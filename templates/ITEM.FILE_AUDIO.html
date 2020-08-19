@@ -1,0 +1,13 @@
+<div class="aitem{CUSTOM_CLASSES}">
+    <div class="aitem_content">
+        <div class="aitem_content_icon"><span class="material-icons"> audiotrack </span></div>
+        <div class="aitem_content_title"><a href="{ITEM_PATH}">{ITEM_NAME}</a></div>
+        <div class="aitem_content_date">{ITEM_MODIFIED}</div>
+        <div class="aitem_content_date aitem_content_date_short">{ITEM_MODIFIED_SHORT}</div>
+        <div class="aitem_content_size">{ITEM_SIZE}</div>
+        <div class="aitem_content_actions">
+            <div data-tracktitle="{ITEM_NAME}" data-trackaudio="{ITEM_PATH}?action=play" onclick="PlaybackBtnPressed(this);" class="aitem_content_action_base aitem_content_action_play jsrequired"></div>
+            <a href="{ITEM_PATH}?action=download" target="_blank"><div class="aitem_content_action_base aitem_content_action_download"></div></a>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,38 @@
+
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>RomanPort Archives - Admin</title>
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css?family=Rubik:500,700&display=swap" rel="stylesheet">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    </head>
+    <body>
+        <b>Create Directory at {PATH}</b><br><br>
+        <form method="post">
+            <label for="dir_name">Directory Name on Disk</label><br>
+            <input type="text" id="dir_name" name="dir_name"/><br><br>
+
+            <label for="dir_title">Directory Title</label><br>
+            <input type="text" id="dir_title" name="dir_title"/><br><br>
+
+            <label for="dir_description">Description</label><br>
+            <textarea id="dir_description" name="dir_description" rows="2" cols="80">No description provided.</textarea><br><br>
+
+            <label for="footer">Footer HTML</label><br>
+            <textarea id="footer" name="footer" rows="4" cols="80" placeholder="(Not Required)"></textarea><br><br>
+
+            <input type="submit" value="Create">
+        </form>
+
+        <script>
+
+        document.getElementById('dir_name').addEventListener("input", () => {
+            document.getElementById('dir_title').value = document.getElementById('dir_name').value;
+        });
+
+        </script>
+    </body>
+</html>

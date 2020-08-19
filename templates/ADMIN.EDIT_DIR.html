@@ -1,0 +1,27 @@
+
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>RomanPort Archives - Admin</title>
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css?family=Rubik:500,700&display=swap" rel="stylesheet">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    </head>
+    <body>
+        <b>Modify Directory at {PATH}</b><br><br>
+        <form method="post">
+            <label for="dir_title">Directory Title</label><br>
+            <input type="text" id="dir_title" name="dir_title" value="{DIR_TITLE}"/><br><br>
+
+            <label for="dir_description">Description</label><br>
+            <textarea id="dir_description" name="dir_description" rows="2" cols="80">{DIR_DESCRIPTION}</textarea><br><br>
+
+            <label for="footer">Footer HTML</label><br>
+            <textarea id="footer" name="footer" rows="45" cols="150" placeholder="(Not Required)">{DIR_FOOTER}</textarea><br><br>
+
+            <input type="submit" value="Modify">
+        </form>
+    </body>
+</html>
