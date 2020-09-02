@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -142,6 +143,10 @@ namespace RomanPort.HttpWebArchive.Framework.FS
                 await OnAdminEditDir(e);
             else if (action == "admin_delete" && site.IsAdminAuthenticated(e))
                 await OnAdminDeleteDir(e);
+            else if (action == "admin_audio_editor")
+                await OnAdminAudioEditorFrontend(e);
+            else if (action == "admin_rest_audio_upload" && site.IsAdminAuthenticated(e))
+                await OnAdminAudioEditorUpload(e);
         }
 
         public async Task OnStandardRequest(HttpContext e)
@@ -213,7 +218,7 @@ namespace RomanPort.HttpWebArchive.Framework.FS
 
             //Write admin bar if authenticated
             if (site.IsAdminAuthenticated(e))
-                await e.WriteString($"<div class=\"adminbar\"><b>Archive Admin</b> - <a href=\"?action=admin_upload\">[Upload File]</a> <a href=\"?action=admin_mkdir\">[Create Directory]</a> - <a href=\"?action=admin_modify\">[Modify Directory]</a> <a href=\"?action=admin_delete\">[Delete Directory]</a> - <a href=\"{site.config.client_pathname_prefix}/signout\">[Log Out]</a></div>");
+                await e.WriteString($"<div class=\"adminbar\"><b>Archive Admin</b> - <a href=\"?action=admin_upload\">[Upload File]</a> <a href=\"?action=admin_audio_editor\">[Edit &amp; Upload Audio]</a> <a href=\"?action=admin_mkdir\">[Create Directory]</a> - <a href=\"?action=admin_modify\">[Modify Directory]</a> <a href=\"?action=admin_delete\">[Delete Directory]</a> - <a href=\"{site.config.client_pathname_prefix}/signout\">[Log Out]</a></div>");
 
             //Write end
             await TemplateManager.WriteTemplate(e.Response.Body, "PAGE.DIR.POST_CONTENT", new Dictionary<string, string>
@@ -564,6 +569,138 @@ namespace RomanPort.HttpWebArchive.Framework.FS
                 //Redirect to parent
                 e.Response.Redirect(site.config.client_pathname_prefix + parent.path_urlsafe, false);
             }
+        }
+
+        /* Audio editor */
+
+        public async Task OnAdminAudioEditorFrontend(HttpContext e)
+        {
+            //Set headers
+            e.Response.ContentType = "text/html";
+
+            //Make default tags
+            string tags = "";
+            if (subFiles.Count > 0)
+            {
+                for (int i = 0; i < subFiles[0].metadata.tags.Length; i += 1)
+                {
+                    tags += subFiles[0].metadata.tags[i];
+                    if (i != subFiles[0].metadata.tags.Length - 1)
+                        tags += ",";
+                }
+            }
+
+            //Show form
+            await TemplateManager.WriteTemplate(e.Response.Body, "ADMIN.AUDIO_EDITOR", new Dictionary<string, string>
+            {
+                {"PATH", path },
+                {"TAGS", tags }
+            });
+        }
+
+        public async Task OnAdminAudioEditorUpload(HttpContext e)
+        {
+            //Run
+            var form = await e.Request.ReadFormAsync();
+
+            //Get the pathname
+            string pathname = info.FullName + "/" + form["file_name"];
+
+            //Check
+            if (File.Exists(pathname))
+            {
+                await e.WriteString(JsonConvert.SerializeObject(new AudioEditorResponseData
+                {
+                    ok = false,
+                    dir_url = null,
+                    error_string = "The file you're attempting to create already exists. Aborting!"
+                }));
+                return;
+            }
+
+            //Read audio parameters
+            string audioSampleRate = form["audio_sample_rate"];
+            string audioChannels = form["audio_channels"];
+            string audioFormat = form["audio_format"];
+            string audioGain = form["audio_gain"];
+
+            //Open destination and source for streaming
+            using (FileStream destination = new FileStream(pathname, FileMode.Create))
+            using (Stream source = form.Files["audio_payload"].OpenReadStream())
+            {
+                //Create FFMPEG parameters
+                string args = $"-f {audioFormat} -ar {audioSampleRate} -ac {audioChannels} -i - -filter:a \"volume={audioGain}\" -f mp3 -";
+
+                //Start FFMPEG instance
+                Process ffmpeg = Process.Start(new ProcessStartInfo
+                {
+                    FileName = Program.site.config.ffmpeg_path,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true
+                });
+
+                //Copy
+                Task copyToTask = source.CopyToAsync(ffmpeg.StandardInput.BaseStream);
+                Task copyFromTask = ffmpeg.StandardOutput.BaseStream.CopyToAsync(destination);
+
+                //Wait for copy to finish
+                await copyToTask;
+
+                //Close input stream
+                ffmpeg.StandardInput.BaseStream.Close();
+
+                //Wait for application to end
+                await copyFromTask;
+                ffmpeg.WaitForExit();
+            }
+
+            //Save metadata and refresh
+            SaveUploadedFileMetadata(form);
+
+            //Return
+            await e.WriteString(JsonConvert.SerializeObject(new AudioEditorResponseData
+            {
+                ok = true,
+                dir_url = site.config.client_pathname_prefix + path_urlsafe,
+                error_string = null
+            }));
+        }
+
+        class AudioEditorResponseData
+        {
+            public bool ok;
+            public string dir_url;
+            public string error_string;
+        }
+
+        private void SaveUploadedFileMetadata(IFormCollection form)
+        {
+            //Read data
+            string name = form["file_name"];
+            string type = form["file_type"];
+            string description = form["description"];
+            string[] tags = form["tags"].ToString().Split(',');
+            DateTime time = new DateTime(int.Parse(form["dt_year"]), int.Parse(form["dt_month"]), int.Parse(form["dt_day"]), 12, 0, 0);
+
+            //Get the pathname
+            string pathname = info.FullName + "/" + name;
+
+            //Create metadata
+            var metadata = new ArchivedFileMetadata
+            {
+                template_type = type,
+                tags = tags,
+                description = description,
+                custom_data = new Dictionary<string, string>(),
+                time = time,
+                time_approx = true
+            };
+            File.WriteAllText(pathname + ".meta", JsonConvert.SerializeObject(metadata));
+
+            //Refresh
+            site.RefreshObjects();
         }
     }
 }

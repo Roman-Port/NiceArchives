@@ -1,0 +1,554 @@
+
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>RomanPort Archives - Admin</title>
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css?family=Rubik:500,700&display=swap" rel="stylesheet">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+        <style>
+            html, body {
+                margin:0;
+                padding:0;
+                background-color: #ababab;
+            }
+
+            .top_bar {
+                background-color:#ababab;
+                padding:20px;
+            }
+
+            .top_bar_item {
+                margin-right:10px;
+                display:inline-block;
+            }
+            
+            .top_bar_item_title {
+                font-weight: 800;
+                color: black;
+            }
+
+            .bottom_nav_option {
+                margin-left:5px;
+            }
+
+            .bottom_nav_status {
+                text-align: left;
+                float: left;
+                line-height: 21px;
+            }
+
+            .uploading_shade {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: #000000ba;
+                z-index: 9999;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .uploading_view {
+                width: 40%;
+                height: 20px;
+                background-color: white;
+                border-radius: 5px;
+                overflow: hidden;
+                border: 1px solid black;
+            }
+
+            .uploading_progress {
+                background-color: #3882dc;
+                height: 100%;
+                width: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <input type="file" id="file_upload" style="width: 100vw; height: 100vh;" name="file_upload" onchange="OnFilePicked(this)"/>
+        <div id="default_tags" style="display: none;">{TAGS}</div>
+    </body>
+    <script>
+        var pixelsPerSecond = 40;
+        var displayHeight = document.body.offsetHeight - 165;
+
+        var currentFile;
+        var currentFileArray;
+        var currentFileView;
+        var currentPlayer;
+        var sampRate;
+        var bitsPerSample;
+        var bytesPerSample;
+        var channels;
+        var audioLengthBytes;
+        var audioLengthSeconds;
+        var amplification;
+
+        var viewTopBar;
+        var viewScroller;
+        var viewContainer;
+        var viewCursorCurrent;
+        var viewCursorStart;
+        var viewCursorEnd;
+        var viewMouseDown = false;
+        var previewing = false;
+        var uploading = false;
+        var viewBottomBar;
+        var viewBottomBarStatus;
+
+        var metadataFilename;
+        var metadataDateDay;
+        var metadataDateMonth;
+        var metadataDateYear;
+        var metadataDateHour;
+        var metadataDateMinute;
+        var metadataTags;
+        var metadataDescription;
+
+        var regionBeginSeconds;
+        var regionEndSeconds;
+
+        function OnFilePicked(picker) {
+            //Open
+            currentFile = picker.files[0];
+            var reader = new FileReader();
+            reader.addEventListener('load', (event) => {
+                //Create audio player
+                var blob = new Blob([event.target.result], { type: "audio/wav" });
+                var audio = new Audio();
+                audio.src = window.URL.createObjectURL(blob);
+                currentPlayer = audio;
+
+                //Create view
+                currentFileArray = event.target.result;
+                currentFileView = new DataView(event.target.result);
+                OnFileLoaded();
+            });
+            reader.readAsArrayBuffer(currentFile);
+            picker.remove();
+        }
+
+        function CreateDom(type, classname, parent, text) {
+            var e = document.createElement(type);
+            if (classname != null) {
+                e.className = classname;
+            }
+            if (parent != null) {
+                parent.appendChild(e);
+            }
+            if (text != null) {
+                e.innerText = text;
+            }
+            return e;
+        }
+
+        function GetAmplification(startSampleIndex, endSampleIndex) {
+            var maxAmp = 0;
+            for(var i = startSampleIndex; i<endSampleIndex; i+=1) {
+                maxAmp = Math.max(maxAmp, Math.abs(GetAmplitude(ReadSampleAtIndex(i))));
+            }
+            return 1 / maxAmp;
+        }
+
+        function OnFileLoaded() {
+            //Make sure this is a valid file
+            if(currentFileView.getInt32(0, true) != 1179011410) {
+                alert("This is not a WAV file.");
+                window.location.reload();
+            }
+
+            //Read metadata
+            sampRate = currentFileView.getInt32(24, true);
+            bitsPerSample = currentFileView.getInt16(16, true);
+            channels = currentFileView.getInt16(22, true);
+            bytesPerSample = bitsPerSample / 8;
+            audioLengthBytes = currentFileView.byteLength - 44;
+            audioLengthSeconds = ByteLocationToSeconds(audioLengthBytes);
+
+            //Validate
+            if(bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 32) {
+                alert("Unknown bit depth "+bitsPerSample);
+                window.location.reload();
+            }
+
+            //Determine the amount to amplify. We'll do this by finding the max value
+            amplification = GetAmplification(0, Math.floor(audioLengthBytes / bytesPerSample));
+
+            //Create status bar
+            viewTopBar = CreateDom("div", "top_bar", document.body);
+
+            //Create name metadata
+            metadataFilename = CreateDom("input", null, CreateTopBarItem("Filename"));
+            metadataFilename.value = currentFile.name.substr(0, currentFile.name.length - 4) + ".mp3";
+            metadataFilename.style.width = "250px";
+
+            //Create date metadata
+            var navTime = CreateTopBarItem("Date");
+            metadataDateMonth = CreateDateItem(currentFile.lastModifiedDate.getMonth(), "MM", 1, 12, " / ", navTime);
+            metadataDateDay = CreateDateItem(currentFile.lastModifiedDate.getDate(), "DD", 1, 31, " / ", navTime);
+            metadataDateYear = CreateDateItem(currentFile.lastModifiedDate.getYear() + 1900, "YYYY", 2020, 3020, " - ", navTime);
+            metadataDateHour = CreateDateItem(currentFile.lastModifiedDate.getHours(), "HH", 1, 24, " : ", navTime);
+            metadataDateMinute = CreateDateItem(currentFile.lastModifiedDate.getMinutes(), "MM", 1, 59, "", navTime);
+
+            //Create tags metadata
+            metadataTags = CreateDom("input", null, CreateTopBarItem("Tags"));
+            metadataTags.value = default_tags.innerText;
+
+            //Create description metadata
+            metadataDescription = CreateDom("input", null, CreateTopBarItem("Description"));
+            metadataDescription.value = "No description provided.";
+
+            //Create info metadata
+            CreateDom("div", null, CreateTopBarItem("File Info")).innerText = GetFFMPEGFormat() + " - " + sampRate + " samples/sec";
+
+            //Create player
+            viewScroller = CreateDom("div", null, document.body);
+            viewScroller.style.overflowX = "scroll";
+            viewScroller.style.width = "100%";
+            viewContainer = CreateDom("div", null, viewScroller);
+            viewContainer.style.position = "relative";
+            viewContainer.style.width = Math.floor(audioLengthSeconds * pixelsPerSecond) + "px";
+            viewContainer.style.backgroundColor = "white";
+            var canvas = CreateDom("canvas", null, viewContainer);
+            canvas.width = Math.floor(audioLengthSeconds * pixelsPerSecond);
+            canvas.height = displayHeight;
+
+            //Generate wavform
+            var samplesPerPixel = Math.floor((sampRate / pixelsPerSecond));
+            var ctx = canvas.getContext("2d");
+            var lastMax = -2;
+            var lastAvg = -2;
+            for(var i = 0; i<Math.floor(audioLengthSeconds * pixelsPerSecond)-1; i+=1) {
+                //Read all samples in range
+                var max = -1;
+                var avg = -2;
+                for(var k = 0; k<Math.floor(samplesPerPixel); k += 1) {
+                    var value = AmplifySample(GetAmplitude(ReadSampleAtIndex((samplesPerPixel * i * channels) + k)));
+                    max = Math.max(max, Math.abs(value));
+                    if(avg == -2) {
+                        avg = Math.abs(value);
+                    } else {
+                        avg = (Math.abs(value) + avg) / 2;
+                    }
+                }
+
+                //Make it pretty
+                if(lastMax != -2) {
+                    max = (lastMax + max) / 2;
+                    avg = (lastAvg + avg) / 2;
+                }
+                lastMax = max;
+                lastAvg = avg;
+
+                //Write to canvas
+                ctx.beginPath();
+                ctx.strokeStyle = "#3882dc";
+                ctx.moveTo(i, (displayHeight / 2) - Math.floor(Math.abs(max * (displayHeight / 2))));
+                ctx.lineTo(i, (displayHeight / 2) + Math.floor(Math.abs(max * (displayHeight / 2))));
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.strokeStyle = "#2a61a3";
+                ctx.moveTo(i, (displayHeight / 2) - Math.floor(Math.abs(avg * (displayHeight / 2))));
+                ctx.lineTo(i, (displayHeight / 2) + Math.floor(Math.abs(avg * (displayHeight / 2))));
+                ctx.stroke();
+            }
+
+            //Create cursor
+            viewCursorCurrent = CreateCursor("#000000");
+            window.setInterval(() => {
+                //Cancel if uploading
+                if(uploading) {return;}
+                
+                //Set cursor
+                var currentPos = (currentPlayer.currentTime * pixelsPerSecond);
+                viewCursorCurrent.style.left = currentPos + "px";
+
+                //Move window to center
+                if(!currentPlayer.paused) {
+                    viewScroller.scrollLeft = currentPos - (viewScroller.offsetWidth / 2);
+                }
+
+                //Stop if previewing
+                if(previewing && currentPlayer.currentTime > regionEndSeconds) {
+                    currentPlayer.pause();
+                    previewing = false;
+                }
+            }, 5);
+            /*canvas.addEventListener("mousemove", (evt) => {
+                if(viewMouseDown) {
+                    currentPlayer.currentTime = evt.offsetX / pixelsPerSecond;
+                }
+            });*/
+            canvas.addEventListener("mousedown", (evt) => {
+                if(evt.button != 0) {return;}
+                viewMouseDown = true;
+                currentPlayer.currentTime = evt.offsetX / pixelsPerSecond;
+                viewScroller.scrollLeft = (currentPlayer.currentTime * pixelsPerSecond) - (viewScroller.offsetWidth / 2);
+            });
+            canvas.addEventListener("mouseup", (evt) => {
+                if(evt.button != 0) {return;}
+                viewMouseDown = false;
+            });
+            window.addEventListener("wheel", (evt) => {
+                //Cancel if uploading
+                if(uploading) {return;}
+
+                if(!currentPlayer.paused) {
+                    //Playing. Skip
+                    currentPlayer.currentTime -= evt.wheelDelta / 2 / pixelsPerSecond;
+                } else {
+                    //Paused. Move the window
+                    viewScroller.scrollLeft -= evt.wheelDelta;
+                }
+            });
+
+            //Create start and end cursors
+            viewCursorStart = CreateCursor("#3deb2d");
+            regionBeginSeconds = 0;
+            viewCursorEnd = CreateCursor("#eb4d2d");
+            regionEndSeconds = audioLengthSeconds;
+            viewCursorEnd.style.left = Math.floor(audioLengthSeconds * pixelsPerSecond) + "px";
+
+            //Create keyboard bindings
+            window.addEventListener("keydown", (evt) => {
+                //Cancel if uploading
+                if(uploading) {return;}
+
+                //Respond
+                var handled = true;
+                if(evt.keyCode == 219 || evt.keyCode == 81) {
+                    //'['/'Q' key. Sets the current start
+                    //Make sure that this won't switch them around
+                    if(currentPlayer.currentTime < regionEndSeconds) {
+                        //Set
+                        viewCursorStart.style.left = Math.floor(currentPlayer.currentTime * pixelsPerSecond) + "px";
+                        regionBeginSeconds = currentPlayer.currentTime;
+                        UpdateStatusText();
+                    }
+                } else if(evt.keyCode == 221 || evt.keyCode == 69) {
+                    //']'/'E' key. Sets the current end
+                    //Make sure that this won't switch them around
+                    if(currentPlayer.currentTime > regionBeginSeconds) {
+                        //Set
+                        viewCursorEnd.style.left = Math.floor(currentPlayer.currentTime * pixelsPerSecond) + "px";
+                        regionEndSeconds = currentPlayer.currentTime;
+                        UpdateStatusText();
+                    }
+                } else if(evt.keyCode == 32) {
+                    //Space key. Pauses or resumes
+                    previewing = false;
+                    if(currentPlayer.paused) {
+                        currentPlayer.play();
+                    } else {
+                        currentPlayer.pause();
+                    }
+                } else if (evt.keyCode == 37 || evt.keyCode == 65) {
+                    //Left arrow key or A. Jump back a few seconds
+                    currentPlayer.currentTime -= 3;
+                } else if (evt.keyCode == 39 || evt.keyCode == 68) {
+                    //Right arrow key or D. Jump forward a few seconds
+                    currentPlayer.currentTime += 3;
+                } else if (evt.keyCode == 87) {
+                    //W key. Go to the start of the current region
+                    currentPlayer.currentTime = regionBeginSeconds;
+                    currentPlayer.play();
+                    previewing = true;
+                } else {
+                    //Log the key code for future reference
+                    console.log("KEY DOWN: "+ evt.keyCode);
+                    handled = false;
+                }
+                if(handled) {
+                    evt.preventDefault();
+                }
+            });
+
+            //Create bottom bar
+            viewBottomBar = CreateDom("div", "top_bar", document.body);
+            viewBottomBar.style.textAlign = "right";
+            CreateBottomBarAction("Close File", () => window.location.reload());
+            CreateBottomBarAction("Upload File", () => UploadContent());
+            viewBottomBarStatus = CreateDom("span", "bottom_nav_status", viewBottomBar);
+            UpdateStatusText();
+        }
+
+        function UpdateStatusText() {
+            //Get number of seconds
+            var lengthSeconds = regionEndSeconds - regionBeginSeconds;
+
+            //Get length in bytes
+            var lengthBytes = SecondsToByteLocation(lengthSeconds);
+            
+            //Get time in human readable form
+            var minutes = Math.floor(lengthSeconds / 60);
+            var seconds = Math.floor(lengthSeconds % 60);
+
+            //Get bytes in human readable form
+            var bytesReadable = (Math.round((lengthBytes / 1024 / 1024) * 100) / 100) + " MB";
+
+            //Set
+            viewBottomBarStatus.innerText = minutes.toString().padStart(2, '0') + ":" + seconds.toString().padStart(2, '0') + " - " + bytesReadable;
+        }
+
+        function CreateBottomBarAction(text, callback) {
+            var c = CreateDom("input", "bottom_nav_option", viewBottomBar);
+            c.type = "button";
+            c.value = text;
+            c.addEventListener("click", () => callback());
+        }
+
+        function CreateDateItem(currentValue, placeholder, min, max, suffix, container) {
+            var c = CreateDom("input", null, container);
+            c.value = currentValue;
+            c.placeholder = placeholder;
+            c.type = "number";
+            c.max = max;
+            c.min = min;
+            c.style.width = ((8 * max.toString().length) + 18).toString() + "px";
+            CreateDom("span", null, container, suffix);
+            return c;
+        }
+
+        function CreateTopBarItem(title) {
+            var d = CreateDom("div", "top_bar_item", viewTopBar);
+            CreateDom("div", "top_bar_item_title", d, title);
+            return d;
+        }
+
+        function CreateAudioBlob() {
+            //Find start and stop bytes
+            var startIndex = SecondsToByteLocation(regionBeginSeconds);
+            var endIndex = SecondsToByteLocation(regionEndSeconds);
+
+            //Slice
+            return currentFileArray.slice(startIndex, endIndex);
+        }
+
+        function CreateCursor(color) {
+            var c = CreateDom("div", null, viewContainer);
+            c.style.position = "absolute";
+            c.style.width = "4px";
+            c.style.top = "0";
+            c.style.height = "100%";
+            c.style.zIndex = "100";
+            c.style.backgroundColor = color;
+            c.style.pointerEvents = "none";
+            return c;
+        }
+
+        function ReadSampleAtIndex(sampleIndex) {
+            var pos = (sampleIndex * bytesPerSample) + 44;
+            if(bitsPerSample == 8) {
+                return currentFileView.getInt8(pos);
+            } else if (bitsPerSample == 16) {
+                return currentFileView.getInt16(pos, true);
+            } else if (bitsPerSample == 32) {
+                return currentFileView.getFloat32(pos, true);
+            }
+        }
+
+        function GetAmplitude(sample) {
+            //Returns it between -1 and 1
+            if(bitsPerSample == 8) {
+                return sample / 128;
+            } else if (bitsPerSample == 16) {
+                return sample / 32768;
+            } else if (bitsPerSample == 32) {
+                return sample;
+            }
+        }
+
+        function AmplifySample(sample) {
+            var s = sample *= amplification;
+            if(s > 1) {
+                s = 1;
+            }
+            if(s < -1) {
+                s = -1;
+            }
+            return s;
+        }
+
+        function SecondsToByteLocation(seconds) {
+            return SecondsToSampleIndex(seconds) * bytesPerSample;
+        }
+
+        function ByteLocationToSeconds(bytes) {
+            return bytes / sampRate / channels / bytesPerSample;
+        }
+
+        function SecondsToSampleIndex(seconds) {
+            return Math.floor(seconds * sampRate * channels);
+        }
+
+        function UploadContent() {
+            //Create interface
+            var shade = CreateDom("div", "uploading_shade", document.body);
+            var bar = CreateDom("div", "uploading_view", shade);
+            var progress = CreateDom("div", "uploading_progress", bar);
+            uploading = true;
+
+            //Create form data
+            var fd = new FormData();
+            
+            //Set form data for audio
+            var blob = CreateAudioBlob();
+            fd.set("audio_payload", new Blob([blob], {"type":"audio/wav"}));
+            fd.set("audio_sample_rate", sampRate);
+            fd.set("audio_channels", channels);
+            fd.set("audio_format", GetFFMPEGFormat());
+            fd.set("audio_gain", GetAmplification(SecondsToSampleIndex(regionBeginSeconds), SecondsToSampleIndex(regionEndSeconds)));
+
+            //Set form data for metadata
+            fd.set("file_name", metadataFilename.value);
+            fd.set("file_type", "FILE_AUDIO");
+            fd.set("description", metadataDescription.value);
+            fd.set("tags", metadataTags.value);
+            fd.set("dt_year", metadataDateYear.value);
+            fd.set("dt_month", metadataDateMonth.value);
+            fd.set("dt_day", metadataDateDay.value);
+            fd.set("dt_hour", metadataDateHour.value);
+            fd.set("dt_minute", metadataDateMinute.value);
+
+            //Send
+            var xmlhttp = new XMLHttpRequest();
+            xmlhttp.onreadystatechange = function () {
+                if (this.readyState === 4 && this.status === 200) {
+                    progress.style.width = "100%";
+                    var payload = JSON.parse(this.responseText);
+                    if(payload.ok) {
+                        window.location = payload.dir_url + encodeURIComponent(metadataFilename.value);
+                    } else {
+                        alert("Upload Error: " + payload.error_string);
+                        window.location.reload();
+                    }
+                } else if (this.readyState === 4) {
+                    alert("Upload Failed.");
+                    window.location.reload();
+                }
+            }
+            xmlhttp.onprogress = (evt) => {
+                var p = Math.ceil((evt.loaded / blob.byteLength) * 100);
+                progress.style.width = p.toString() + "%"; 
+            }
+            xmlhttp.open("POST", "?action=admin_rest_audio_upload", true);
+            xmlhttp.send(fd);
+        }
+
+        function GetFFMPEGFormat() {
+            if(bitsPerSample == 8) {
+                return "s8";
+            } else if (bitsPerSample == 16) {
+                return "s16le";
+            } else if (bitsPerSample == 32) {
+                return "f32le";
+            }
+        }
+    </script>
+</html>

@@ -30,8 +30,6 @@ namespace RomanPort.HttpWebArchive.Framework
                     await e.WriteString("<span style=\"color: red;\">There is an ongoing login attempt. Please wait and try again.</span>");
                 }
                 busy = true;
-                await Task.Delay(3000);
-                busy = false;
                 
                 //Parse form
                 var form = await e.Request.ReadFormAsync();
@@ -49,9 +47,12 @@ namespace RomanPort.HttpWebArchive.Framework
                 else
                 {
                     //Failed
+                    await Task.Delay(3000);
                     e.Response.ContentType = "text/html";
                     await e.WriteString("<span style=\"color: red;\">Could not log in. Please try again.</span>");
                 }
+
+                busy = false;
             }
         }
 

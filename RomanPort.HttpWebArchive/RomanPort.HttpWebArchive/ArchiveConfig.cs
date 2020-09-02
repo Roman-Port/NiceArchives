@@ -12,5 +12,6 @@ namespace RomanPort.HttpWebArchive
         public string client_pathname_prefix; //The prefix to add before an <a> html
         public int port;
         public string admin_key;
+        public string ffmpeg_path;
     }
 }
