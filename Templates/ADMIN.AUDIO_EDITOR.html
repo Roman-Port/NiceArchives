@@ -320,6 +320,11 @@
                 //Cancel if uploading
                 if(uploading) {return;}
 
+                //Check if we're interacting with an input
+                if(evt.target.tagName == "INPUT") {
+                    return;
+                }
+
                 //Respond
                 var handled = true;
                 if(evt.keyCode == 219 || evt.keyCode == 81) {
