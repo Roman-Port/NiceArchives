@@ -189,7 +189,7 @@
 
             //Create date metadata
             var navTime = CreateTopBarItem("Date");
-            metadataDateMonth = CreateDateItem(currentFile.lastModifiedDate.getMonth(), "MM", 1, 12, " / ", navTime);
+            metadataDateMonth = CreateDateItem(currentFile.lastModifiedDate.getMonth() + 1, "MM", 1, 12, " / ", navTime);
             metadataDateDay = CreateDateItem(currentFile.lastModifiedDate.getDate(), "DD", 1, 31, " / ", navTime);
             metadataDateYear = CreateDateItem(currentFile.lastModifiedDate.getYear() + 1900, "YYYY", 2020, 3020, " - ", navTime);
             metadataDateHour = CreateDateItem(currentFile.lastModifiedDate.getHours(), "HH", 1, 24, " : ", navTime);
@@ -264,7 +264,7 @@
             window.setInterval(() => {
                 //Cancel if uploading
                 if(uploading) {return;}
-                
+
                 //Set cursor
                 var currentPos = (currentPlayer.currentTime * pixelsPerSecond);
                 viewCursorCurrent.style.left = currentPos + "px";
