@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RomanPort.HttpWebArchive
@@ -18,6 +19,8 @@ namespace RomanPort.HttpWebArchive
         public ArchiveConfig config;
         public Dictionary<string, ArchivedObject> objects; //List of objects stored by their path
         public ArchivedDirectory root;
+
+        private Thread metadataGeneratorThread;
 
         public string activeToken;
 
@@ -29,10 +32,50 @@ namespace RomanPort.HttpWebArchive
             RefreshObjects();
         }
 
+        private void StartMetadataGeneratorThread()
+        {
+            metadataGeneratorThread = new Thread(() =>
+            {
+                //Search through objects and find files that need metadata generated
+                foreach (var f in objects)
+                {
+                    //Check if we should generate metadata
+                    if (f.Value.rich_metadata_status == ArchivedObject.MetadataStatus.NOT_GENERATED)
+                    {
+                        Console.WriteLine("Starting metadata generation on " + f.Key);
+                        try
+                        {
+                            f.Value.rich_metadata_status = f.Value.GenerateRichMetadata();
+                        }
+                        catch
+                        {
+                            f.Value.rich_metadata_status = ArchivedObject.MetadataStatus.FAILED;
+                        }
+                        Console.WriteLine("Result code: " + f.Value.rich_metadata_status.ToString());
+                    }
+                }
+
+                //Set to null
+                metadataGeneratorThread = null;
+            });
+            metadataGeneratorThread.IsBackground = true;
+            metadataGeneratorThread.Start();
+        }
+
         public void RefreshObjects()
         {
+            //Kill metadata thread
+            if (metadataGeneratorThread != null)
+                metadataGeneratorThread.Abort();
+            
+            //Clear objects
             objects.Clear();
+
+            //Discover all
             root = ArchivedDirectory.GetRootDirectory(this, config.archives_dir);
+
+            //Start metadata generator thread
+            StartMetadataGeneratorThread();
         }
 
         public void AddStoredObject(ArchivedObject o)

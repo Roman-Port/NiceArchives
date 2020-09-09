@@ -43,6 +43,14 @@ namespace RomanPort.HttpWebArchive.Framework.FS
                 footer = File.ReadAllText(dir.FullName + "/FOOTER.dirmeta");
             else
                 footer = "";
+
+            //Set rich metadata
+            rich_metadata_status = MetadataStatus.NO_METADATA;
+        }
+
+        public override MetadataStatus GenerateRichMetadata()
+        {
+            return MetadataStatus.NOT_GENERATED;
         }
 
         public override string GetName()
@@ -168,17 +176,28 @@ namespace RomanPort.HttpWebArchive.Framework.FS
             //Create path
             string pathElements = "";
             var parentElement = this;
-            while(parentElement != null)
+            string pathPlain = "";
+            while (parentElement != null)
             {
                 string name;
                 if (parentElement.isRoot)
                     name = "<span class=\"material-icons\"> folder </span>";
                 else
+                {
                     name = HttpUtility.HtmlEncode(parentElement.GetName());
+                    pathPlain = " > " + name + pathPlain;
+                }
                 pathElements = "<div class=\"head_path_item\"><a href=\"" + site.config.client_pathname_prefix + parentElement.path_urlsafe + "\">" + name + "</a></div><div class=\"head_path_divider\">/</div>" + pathElements;
                 parentElement = parentElement.parent;
             }
-            
+
+            //Create HTML meta headers
+            string metas = "";
+            metas += $"<meta property=\"og:site_name\" content=\"RomanPort Archives{pathPlain}\">\n";
+            metas += $"<meta name=\"theme-color\" content=\"#3882dc\">\n";
+            metas += $"<meta property=\"og:title\" content=\"{HttpUtility.HtmlEncode(GetName())} (in {HttpUtility.HtmlEncode(parent.metadata.title)})\">\n";
+            metas += $"<meta property=\"og:description\" content=\"Last Updated {HttpUtility.HtmlEncode(GetLastModifiedString())}\n{HttpUtility.HtmlEncode(metadata.description)}\">\n";
+
             //Write pre
             await TemplateManager.WriteTemplate(e.Response.Body, "PAGE.DIR.PRE_CONTENT", new Dictionary<string, string>
             {
@@ -186,7 +205,8 @@ namespace RomanPort.HttpWebArchive.Framework.FS
                 {"FOLDER_DESCRIPTION", HttpUtility.HtmlEncode(metadata.description) },
                 {"URL", site.config.client_pathname_prefix + path_urlsafe },
                 {"PATH", pathElements },
-                {"CURRENT_SORT", sort.ToString() }
+                {"CURRENT_SORT", sort.ToString() },
+                {"META_TAGS", metas }
             });
 
             //Write the up directory button

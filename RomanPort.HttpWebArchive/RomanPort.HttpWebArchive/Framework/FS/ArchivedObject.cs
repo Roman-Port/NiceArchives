@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,6 +13,7 @@ namespace RomanPort.HttpWebArchive.Framework.FS
     {
         public string path;
         public ArchiveSite site;
+        public MetadataStatus rich_metadata_status = MetadataStatus.NOT_GENERATED;
 
         public string path_urlsafe { get { return GetUrlSafePath(); } }
 
@@ -35,6 +37,10 @@ namespace RomanPort.HttpWebArchive.Framework.FS
 
         public abstract string GetName();
         public abstract long GetSize();
+        /// <summary>
+        /// Called when we're given a chance to generate rich metadata. This should save the metadata when called
+        /// </summary>
+        public abstract MetadataStatus GenerateRichMetadata();
         public abstract DateTime GetLastModified();
         public abstract DateTime GetUploadedDate();
         public abstract void RelocateToDir(string newPath);
@@ -42,6 +48,14 @@ namespace RomanPort.HttpWebArchive.Framework.FS
         public abstract Task WriteListing(Stream s, string customClasses);
 
         public abstract Task OnHttpRequest(HttpContext e);
+
+        public enum MetadataStatus
+        {
+            NOT_GENERATED, //Metadata has not been generated, but should be given the chance
+            FAILED, //Failed to generate metadata. We won't try again.
+            OK, //We already have metadata
+            NO_METADATA //This object doesn't generate metadata
+        }
 
         public const string COOKIE_PREVIOUS_ITEM = "RomanPortArchives-PreviousItem";
         public const string COOKIE_BEFORE_PREVIOUS_ITEM = "RomanPortArchives-BeforePreviousItem";
